@@ -1,0 +1,664 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pocket Arcade</title>
+<style>
+:root {
+  --bg:#0b1220; --panel:#17243a; --green:#36e59b;
+  --blue:#4e9cff; --text:#f4f7ff; --muted:#aebbd0;
+  --red:#ff626f;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; padding:14px; background:var(--bg);
+  color:var(--text); font-family:Arial,sans-serif;
+}
+header {
+  display:flex; justify-content:space-between;
+  align-items:center; gap:8px; flex-wrap:wrap;
+}
+h1 { font-size:25px; margin:8px 0 16px; }
+h2 { font-size:22px; }
+h3 { margin-bottom:8px; }
+p { line-height:1.5; }
+.panel {
+  background:var(--panel); padding:16px; border-radius:16px;
+  margin:12px 0; border:1px solid #293a53;
+}
+button, input, select {
+  font:inherit; border-radius:10px; padding:12px;
+  border:1px solid #41536d; margin:4px;
+}
+button {
+  background:#253852; color:white; cursor:pointer;
+  touch-action:manipulation;
+}
+button:active { transform:scale(.98); }
+button:disabled { opacity:.45; cursor:default; }
+.primary { background:#147d58; border-color:var(--green); }
+.game-menu {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.game-menu button { min-height:66px; font-weight:bold; }
+.row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.small { font-size:13px; color:var(--muted); }
+.status { color:var(--green); font-weight:bold; }
+#game { margin-top:12px; }
+.board {
+  display:grid; gap:5px; margin:12px auto; max-width:360px;
+}
+.ttt { grid-template-columns:repeat(3,1fr); }
+.ttt button { aspect-ratio:1; font-size:34px; }
+.connect { grid-template-columns:repeat(7,1fr); }
+.connect button { padding:5px 0; aspect-ratio:1; font-size:21px; }
+.memory { grid-template-columns:repeat(4,1fr); }
+.memory button { aspect-ratio:1; font-size:25px; padding:4px; }
+input { max-width:100%; width:220px; background:#fff; color:#111; }
+select { background:#fff; color:#111; max-width:100%; }
+.country-list {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:5px; margin-top:10px;
+}
+.country-chip {
+  background:#20364b; padding:8px; border-radius:8px;
+  overflow-wrap:anywhere; font-size:13px;
+}
+.map {
+  background:#071b22; border-radius:12px; padding:10px;
+  overflow:hidden; margin:10px 0;
+}
+.map svg { display:block; width:100%; height:auto; }
+.map-label { fill:#b9f5d8; font-size:10px; }
+.car-card {
+  background:#0f1c2d; border:1px solid #354761;
+  border-radius:12px; padding:14px; margin:10px 0;
+}
+footer { color:var(--muted); font-size:12px; margin:25px 0 8px; }
+@media(min-width:600px) {
+  body { max-width:760px; margin:auto; }
+  .game-menu { grid-template-columns:repeat(4,minmax(0,1fr)); }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎮 Pocket Arcade</h1>
+  <button onclick="goMenu()">⌂ Menu</button>
+</header>
+
+<section id="menu" class="panel">
+  <h2>Welcome to Pocket Arcade!</h2>
+  <p>Choose your playing mode and your game.</p>
+
+  <div class="row">
+    <label for="mode">Playing mode:</label>
+    <select id="mode" onchange="changeMode()">
+      <option value="local">Local multiplayer</option>
+      <option value="cpu">Player vs Computer</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label for="players">Players:</label>
+    <select id="players" onchange="changePlayers()">
+      <option value="1">1 player</option>
+      <option value="2" selected>2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+      <option value="5">5 players</option>
+      <option value="6">6 players</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label for="teams">Teams:</label>
+    <select id="teams">
+      <option value="2">2 teams</option>
+      <option value="3">3 teams</option>
+    </select>
+  </div>
+
+  <h3>Choose a game</h3>
+  <div class="game-menu">
+    <button onclick="start('ttt')">❎ Tic-Tac-Toe</button>
+    <button onclick="start('rps')">✊ Rock Paper Scissors</button>
+    <button onclick="start('connect')">🔴 Connect Four</button>
+    <button onclick="start('memory')">🧠 Memory Match</button>
+    <button onclick="start('number')">🔢 Number Guess</button>
+    <button onclick="start('atlas')">🌍 Atlas</button>
+    <button onclick="start('person')">🕵️ Guess the Person</button>
+    <button onclick="start('car')">🚗 Guess the Car</button>
+  </div>
+</section>
+
+<section id="game" class="panel" hidden></section>
+
+<footer>
+  Pocket Arcade · Made for touchscreens · No extra libraries required
+</footer>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+let mode = "local";
+let players = 2;
+let teams = 2;
+let current = "";
+let turn = 0;
+let scores = {};
+let over = false;
+let state = {};
+
+const names = [
+  "Player 1","Player 2","Player 3",
+  "Player 4","Player 5","Player 6"
+];
+
+const people = [
+  ["A. P. J. Abdul Kalam","He was a scientist and former President of India."],
+  ["Albert Einstein","He developed the theory of relativity."],
+  ["Marie Curie","She was a pioneering scientist who studied radioactivity."],
+  ["Sachin Tendulkar","He is a famous Indian cricket legend."],
+  ["Kalpana Chawla","She was an Indian-born astronaut."],
+  ["Rosa Parks","She became an important figure in the American civil rights movement."],
+  ["Leonardo da Vinci","He painted the Mona Lisa."],
+  ["William Shakespeare","He was a famous English playwright and poet."],
+  ["Nelson Mandela","He fought against apartheid and became South Africa's president."],
+  ["C. V. Raman","He was an Indian physicist who won a Nobel Prize."]
+];
+
+const cars = [
+  ["Toyota","This company makes the Corolla and Camry."],
+  ["Ferrari","This Italian brand is famous for sports cars."],
+  ["Tesla","This company is known for electric cars."],
+  ["BMW","This German brand uses a round blue-and-white badge."],
+  ["Mercedes-Benz","Its logo is a three-pointed star."],
+  ["Lamborghini","This Italian sports-car brand is famous for its bull logo."],
+  ["Honda","This Japanese company makes the Civic."],
+  ["Ford","This company makes the Mustang."],
+  ["Porsche","This German sports-car brand has a crest logo."],
+  ["Hyundai","This South Korean company makes the i20."]
+];
+
+const countries = [
+  "Afghanistan","Albania","Algeria","Andorra","Angola",
+  "Argentina","Armenia","Australia","Austria","Azerbaijan",
+  "Bahamas","Bahrain","Bangladesh","Barbados","Belarus",
+  "Belgium","Belize","Benin","Bhutan","Bolivia",
+  "Botswana","Brazil","Brunei","Bulgaria","Cambodia",
+  "Cameroon","Canada","Chile","China","Colombia",
+  "Costa Rica","Croatia","Cuba","Cyprus","Czechia",
+  "Denmark","Djibouti","Dominica","Dominican Republic",
+  "Ecuador","Egypt","El Salvador","Estonia","Eswatini",
+  "Ethiopia","Fiji","Finland","France","Gabon","Gambia",
+  "Georgia","Germany","Ghana","Greece","Grenada",
+  "Guatemala","Guinea","Guyana","Haiti","Honduras",
+  "Hungary","Iceland","India","Indonesia","Iran","Iraq",
+  "Ireland","Israel","Italy","Jamaica","Japan","Jordan",
+  "Kazakhstan","Kenya","Kiribati","Kuwait","Kyrgyzstan",
+  "Laos","Latvia","Lebanon","Lesotho","Liberia","Libya",
+  "Liechtenstein","Lithuania","Luxembourg","Madagascar",
+  "Malawi","Malaysia","Maldives","Mali","Malta",
+  "Marshall Islands","Mauritania","Mauritius","Mexico",
+  "Micronesia","Moldova","Monaco","Mongolia","Montenegro",
+  "Morocco","Mozambique","Myanmar","Namibia","Nauru",
+  "Nepal","Netherlands","New Zealand","Nicaragua","Niger",
+  "Nigeria","North Korea","North Macedonia","Norway","Oman",
+  "Pakistan","Palau","Panama","Papua New Guinea","Paraguay",
+  "Peru","Philippines","Poland","Portugal","Qatar",
+  "Romania","Russia","Rwanda","Saint Lucia","Samoa",
+  "San Marino","Saudi Arabia","Senegal","Serbia","Seychelles",
+  "Sierra Leone","Singapore","Slovakia","Slovenia",
+  "Solomon Islands","Somalia","South Africa","South Korea",
+  "South Sudan","Spain","Sri Lanka","Sudan","Suriname",
+  "Sweden","Switzerland","Syria","Taiwan","Tajikistan",
+  "Tanzania","Thailand","Togo","Tonga","Trinidad and Tobago",
+  "Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda",
+  "Ukraine","United Arab Emirates","United Kingdom",
+  "United States","Uruguay","Uzbekistan","Vanuatu",
+  "Vatican City","Venezuela","Vietnam","Yemen","Zambia",
+  "Zimbabwe"
+];
+
+function changeMode() {
+  mode = $("mode").value;
+  $("players").disabled = mode === "cpu";
+  if (mode === "cpu") $("players").value = "1";
+  changePlayers();
+}
+
+function changePlayers() {
+  players = mode === "cpu" ? 1 : Number($("players").value);
+  teams = Number($("teams").value);
+}
+
+function who() {
+  if (mode === "cpu" && turn % 2 === 1) return "Computer";
+  return names[turn % Math.max(1, players)];
+}
+
+function award(winner, points = 1) {
+  scores[winner] = (scores[winner] || 0) + points;
+}
+
+function scoreText() {
+  const entries = Object.entries(scores);
+  return entries.length
+    ? entries.map(([n,s]) => n + ": " + s).join(" · ")
+    : "No points yet";
+}
+
+function goMenu() {
+  $("menu").hidden = false;
+  $("game").hidden = true;
+  $("game").innerHTML = "";
+}
+
+function start(game) {
+  changePlayers();
+  current = game;
+  turn = 0;
+  over = false;
+  scores = {};
+  state = {};
+  $("menu").hidden = true;
+  $("game").hidden = false;
+
+  const titles = {
+    ttt:"Tic-Tac-Toe",
+    rps:"Rock Paper Scissors",
+    connect:"Connect Four",
+    memory:"Memory Match",
+    number:"Number Guess",
+    atlas:"Atlas",
+    person:"Guess the Person",
+    car:"Guess the Car"
+  };
+
+  $("game").innerHTML =
+    `<h2>${titles[game]}</h2>
+     <p class="small">Mode: ${mode === "cpu" ? "Player vs Computer" : "Local multiplayer"}</p>
+     <div id="status" class="status" aria-live="polite"></div>
+     <div id="play"></div>
+     <div class="panel"><b>Scores</b><p id="scores">${scoreText()}</p></div>
+     <div class="row">
+       <button onclick="start(current)">🔄 Restart game</button>
+       <button onclick="goMenu()">⌂ Main menu</button>
+     </div>`;
+
+  if (game === "ttt") drawTTT();
+  if (game === "rps") drawRPS();
+  if (game === "connect") drawConnect();
+  if (game === "memory") drawMemory();
+  if (game === "number") drawNumber();
+  if (game === "atlas") drawAtlas();
+  if (game === "person") drawQuiz("person");
+  if (game === "car") drawQuiz("car");
+}
+
+function status(text) {
+  const el = $("status");
+  if (el) el.textContent = text;
+}
+
+function updateScores() {
+  const el = $("scores");
+  if (el) el.textContent = scoreText();
+}
+
+function playArea() { return $("play"); }
+
+function safeName(s) {
+  return s.replace(/[&<>"']/g, ch => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  })[ch]);
+}
+
+/* TIC-TAC-TOE */
+
+function drawTTT() {
+  state.b = Array(9).fill("");
+  state.finished = false;
+  renderTTT();
+}
+
+function renderTTT() {
+  const p = playArea();
+  p.innerHTML = '<div class="board ttt" id="tttboard"></div>';
+  state.b.forEach((v,i) => {
+    const b = document.createElement("button");
+    b.textContent = v || " ";
+    b.setAttribute("aria-label", "Square " + (i+1) + (v ? ": " + v : ""));
+    b.onclick = () => moveTTT(i);
+    b.disabled = !!v || state.finished;
+    $("tttboard").appendChild(b);
+  });
+  status(state.finished ? "Round finished!" : who() + "'s turn");
+}
+
+function moveTTT(i) {
+  if (state.finished || state.b[i]) return;
+  if (mode === "cpu" && turn % 2 === 1) return;
+  state.b[i] = turn % 2 === 0 ? "X" : "O";
+  finishTTT();
+  if (!state.finished) {
+    turn++;
+    renderTTT();
+    if (mode === "cpu") cpuTTT();
+  }
+}
+
+function cpuTTT() {
+  if (state.finished) return;
+  const empty = state.b.map((v,i) => v ? -1 : i).filter(i => i >= 0);
+  if (!empty.length) return;
+  const i = empty[Math.floor(Math.random()*empty.length)];
+  state.b[i] = "O";
+  finishTTT();
+  if (!state.finished) {
+    turn = 0;
+    renderTTT();
+  }
+}
+
+function finishTTT() {
+  const wins = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+  const line = wins.find(a => state.b[a[0]] &&
+    state.b[a[0]] === state.b[a[1]] &&
+    state.b[a[1]] === state.b[a[2]]);
+
+  if (line) {
+    state.finished = true;
+    const winner = state.b[line[0]] === "X"
+      ? (mode === "cpu" ? "You" : names[turn % players])
+      : (mode === "cpu" ? "Computer" : names[(turn+1) % players]);
+    award(winner);
+    updateScores();
+    status(winner + " wins! 🎉");
+    renderTTT();
+  } else if (state.b.every(Boolean)) {
+    state.finished = true;
+    status("It's a draw!");
+    renderTTT();
+  }
+}
+
+/* ROCK PAPER SCISSORS */
+
+function drawRPS() {
+  state.first = null;
+  state.rpsTurn = 0;
+  playArea().innerHTML =
+    '<p>Choose rock, paper or scissors.</p><div id="rpsbuttons" class="row"></div><p id="rpsresult"></p>';
+  ["✊ Rock","✋ Paper","✌️ Scissors"].forEach((label,i) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = () => playRPS(i);
+    $("rpsbuttons").appendChild(b);
+  });
+  status(who() + "'s turn");
+}
+
+function playRPS(choice) {
+  if (mode === "cpu") {
+    const cpu = Math.floor(Math.random()*3);
+    const result = choice === cpu ? "Draw!" :
+      (choice-cpu+3)%3 === 1 ? "You win!" : "Computer wins!";
+    if (result === "You win!") award("You");
+    if (result === "Computer wins!") award("Computer");
+    $("rpsresult").textContent =
+      "You: " + ["Rock","Paper","Scissors"][choice] +
+      " · Computer: " + ["Rock","Paper","Scissors"][cpu] +
+      " · " + result;
+    updateScores();
+    return;
+  }
+
+  if (state.first === null) {
+    state.first = choice;
+    status(names[turn % players] + " chose. Pass the device to the next player!");
+    $("rpsresult").textContent = "First choice saved. Second player, choose now.";
+    turn = 1;
+    return;
+  }
+
+  const first = state.first;
+  const result = first === choice ? 0 : (first-choice+3)%3 === 1 ? 1 : 2;
+  const msg = result === 0 ? "Draw!" :
+    result === 1 ? names[0] + " wins!" : names[1] + " wins!";
+  if (result === 1) award(names[0]);
+  if (result === 2) award(names[1]);
+  $("rpsresult").textContent =
+    "Player 1: " + ["Rock","Paper","Scissors"][first] +
+    " · Player 2: " + ["Rock","Paper","Scissors"][choice] +
+    " · " + msg;
+  state.first = null;
+  turn = 0;
+  updateScores();
+  status("Round complete. Play again!");
+}
+
+/* CONNECT FOUR - TWO PLAYERS */
+
+function drawConnect() {
+  state.b = Array.from({length:6}, () => Array(7).fill(0));
+  state.finished = false;
+  renderConnect();
+}
+
+function renderConnect() {
+  const p = playArea();
+  p.innerHTML = '<p>Drop a disc into a column. Connect four discs to win.</p><div class="board connect" id="connectboard"></div>';
+  for (let c=0;c<7;c++) {
+    const b = document.createElement("button");
+    b.textContent = "⬇";
+    b.onclick = () => drop(c);
+    b.disabled = state.finished;
+    $("connectboard").appendChild(b);
+  }
+  for (let r=0;r<6;r++) for (let c=0;c<7;c++) {
+    const b = document.createElement("button");
+    b.textContent = state.b[r][c] === 1 ? "🔴" :
+      state.b[r][c] === 2 ? "🟡" : "⚪";
+    b.disabled = true;
+    $("connectboard").appendChild(b);
+  }
+  status(who() + "'s turn");
+}
+
+function drop(c) {
+  if (state.finished) return;
+  for (let r=5;r>=0;r--) {
+    if (!state.b[r][c]) {
+      state.b[r][c] = turn%2+1;
+      if (connectWin(r,c)) {
+        state.finished = true;
+        const winner = mode === "cpu"
+          ? (turn%2 === 0 ? "You" : "Computer")
+          : names[turn%players];
+        award(winner);
+        updateScores();
+        status(winner + " wins! 🎉");
+      } else if (state.b.every(row => row.every(Boolean))) {
+        state.finished = true;
+        status("It's a draw!");
+      } else {
+        turn++;
+        if (mode === "cpu") turn = 0;
+      }
+      renderConnect();
+      if (mode === "cpu" && !state.finished && turn === 0) {
+        // Computer uses yellow.
+        setTimeout(cpuConnect, 350);
+      }
+      return;
+    }
+  }
+  status("That column is full. Choose another.");
+}
+
+function cpuConnect() {
+  if (state.finished) return;
+  const valid = [];
+  for (let c=0;c<7;c++) if (!state.b[0][c]) valid.push(c);
+  if (!valid.length) return;
+  const c = valid[Math.floor(Math.random()*valid.length)];
+  for (let r=5;r>=0;r--) {
+    if (!state.b[r][c]) {
+      state.b[r][c] = 2;
+      if (connectWin(r,c)) {
+        state.finished = true;
+        award("Computer");
+        updateScores();
+        status("Computer wins!");
+      } else {
+        turn = 0;
+      }
+      renderConnect();
+      return;
+    }
+  }
+}
+
+function connectWin(r,c) {
+  const n = state.b[r][c];
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  return dirs.some(([dr,dc]) => {
+    let count = 1;
+    for (const sign of [-1,1]) {
+      let rr=r+dr*sign, cc=c+dc*sign;
+      while (rr>=0 && rr<6 && cc>=0 && cc<7 &&
+             state.b[rr][cc]===n) {
+        count++;
+        rr+=dr*sign;
+        cc+=dc*sign;
+      }
+    }
+    return count>=4;
+  });
+}
+
+/* MEMORY MATCH */
+
+function drawMemory() {
+  const icons = ["🍎","🚗","🌟","🐱","⚽","🌈","🎵","🍕"];
+  state.cards = [...icons,...icons].sort(() => Math.random()-0.5);
+  state.open = [];
+  state.matched = [];
+  state.lock = false;
+  state.moves = 0;
+  renderMemory();
+}
+
+function renderMemory() {
+  const p = playArea();
+  p.innerHTML = `<p>Find all matching pairs. Moves: ${state.moves}</p><div class="board memory" id="memoryboard"></div>`;
+  state.cards.forEach((v,i) => {
+    const b = document.createElement("button");
+    b.textContent = state.matched.includes(i) || state.open.includes(i) ? v : "❔";
+    b.disabled = state.matched.includes(i) || state.lock;
+    b.onclick = () => flip(i);
+    $("memoryboard").appendChild(b);
+  });
+  status("Find the matching pairs!");
+}
+
+function flip(i) {
+  if (state.lock || state.open.includes(i) || state.matched.includes(i)) return;
+  state.open.push(i);
+  renderMemory();
+  if (state.open.length === 2) {
+    state.moves++;
+    state.lock = true;
+    renderMemory();
+    const [a,b] = state.open;
+    if (state.cards[a] === state.cards[b]) {
+      setTimeout(() => {
+        state.matched.push(a,b);
+        state.open = [];
+        state.lock = false;
+        if (state.matched.length === state.cards.length) {
+          award(mode === "cpu" ? "You" : names[0]);
+          updateScores();
+          status("You found every pair! 🎉");
+        }
+        renderMemory();
+      },400);
+    } else {
+      setTimeout(() => {
+        state.open = [];
+        state.lock = false;
+        renderMemory();
+      },850);
+    }
+  }
+}
+
+/* NUMBER GUESS */
+
+function drawNumber() {
+  state.answer = Math.floor(Math.random()*100)+1;
+  state.guesses = 0;
+  playArea().innerHTML =
+    '<p>Guess a number between 1 and 100.</p>' +
+    '<input id="guessinput" type="number" min="1" max="100" placeholder="Enter number">' +
+    '<button onclick="submitGuess()">Guess</button>' +
+    '<p id="guessresult"></p>';
+  status("Your turn!");
+}
+
+function submitGuess() {
+  if (over) return;
+  const input = $("guessinput");
+  const n = Number(input.value);
+  if (!input.value || n<1 || n>100 || !Number.isInteger(n)) {
+    $("guessresult").textContent = "Enter a whole number from 1 to 100.";
+    return;
+  }
+  state.guesses++;
+  if (n === state.answer) {
+    $("guessresult").textContent = "Correct! The number was " + state.answer +
+      ". Guesses: " + state.guesses + ".";
+    award(mode === "cpu" ? "You" : who());
+    over = true;
+    updateScores();
+    status("You guessed it! 🎉");
+  } else {
+    $("guessresult").textContent = n < state.answer
+      ? "Too low! Try a higher number."
+      : "Too high! Try a lower number.";
+    input.value = "";
+    input.focus();
+  }
+}
+
+/* ATLAS */
+
+function cleanCountry(s) {
+  return s.toLowerCase().replace(/[^a-z]/g,"");
+}
+
+function drawAtlas() {
+  state.used = [];
+  state.lastLetter = "";
+  state.lastCountry = "";
+  state.atlasOver = false;
+
+  playArea().innerHTML = `
+    <p>Say or type a country name. Each new country must start with
+    the last letter of the previous country.</p>
+    <div class="map">
+      <svg viewBox="0 0 360 170" role="img" aria-label="Decorative world map illustration">
+        <rect x="0" y="0" width="360" height="170" rx="8" fill="#071
